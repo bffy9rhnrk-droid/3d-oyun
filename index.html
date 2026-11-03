@@ -37,6 +37,8 @@
   button:disabled { background:#cbd5e1; cursor:default; }
   button.ghost { background:#e2e8f0; color:#1d2a38; }
   #mClose { margin-top:12px; width:100%; background:#e2e8f0; color:#1d2a38; }
+  /* Tanı satırı: sahnenin çizilip çizilmediğini gösterir */
+  #dbg { top:auto; bottom:4px; left:50%; transform:translateX(-50%); padding:2px 8px; font-size:10px; color:#334155; background:#ffffffb3; border-radius:8px; z-index:4; white-space:nowrap; }
   /* Sanal joystick (sol alt) ve E düğmesi (sağ alt). Yatay/dikey fark etmez: yukarı itmek her zaman ileri. */
   #joy { position:fixed; left:calc(16px + env(safe-area-inset-left)); bottom:calc(16px + env(safe-area-inset-bottom)); width:150px; height:150px; border-radius:50%; background:#ffffff59; border:2px solid #ffffffaa; box-shadow:inset 0 0 14px #0001; touch-action:none; z-index:6; }
   #knob { position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:#ffffffe6; box-shadow:0 4px 12px #0003; pointer-events:none; }
@@ -66,6 +68,9 @@
   #sprintBtn, #menuBtn { position:fixed; touch-action:none; border:0; background:#ffffffd9; color:#1d2a38; box-shadow:0 4px 12px #0003; z-index:6; padding:0; }
   #sprintBtn { right:calc(26px + env(safe-area-inset-right)); bottom:calc(118px + env(safe-area-inset-bottom)); width:62px; height:62px; border-radius:50%; font-size:24px; }
   #menuBtn { right:calc(14px + env(safe-area-inset-right)); top:calc(10px + env(safe-area-inset-top)); width:42px; height:42px; border-radius:12px; font-size:20px; }
+  /* Yükleme hatası: 3B kütüphane yüklenemezse bu ekran görünür */
+  #loadErr { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; text-align:center; padding:24px; background:#1d2a38e6; color:#fff; font-size:16px; line-height:1.6; }
+  #loadErr.show { display:flex; }
   /* Dikey tutulursa oyunu durdurup "yan çevir" uyarısı göster (yalnızca dokunmatik cihazlarda) */
   #rotate { display:none; position:fixed; inset:0; z-index:50; background:#1d2a38; color:#fff; align-items:center; justify-content:center; text-align:center; font-size:18px; line-height:1.7; padding:24px; }
   @media (orientation: portrait) and (pointer: coarse) { #rotate { display:flex; } }
@@ -87,12 +92,14 @@
 <div id="prompt" class="panel"></div>
 <div id="progress" class="panel"><div id="pTitle">Vardiya</div><div class="bar"><div id="pBar" style="width:0%"></div></div></div>
 <div id="toast" class="panel"></div>
+<div id="dbg" class="panel"></div>
 
 <div id="look" aria-label="Kamera: sürükle"></div>
 <div id="joy" aria-label="Hareket joystick'i"><div id="knob"></div></div>
 <button id="sprintBtn" aria-label="Koş">🏃</button>
 <button id="touchE" aria-label="Etkileşim">E</button>
 <button id="menuBtn" aria-label="Durum">☰</button>
+<div id="loadErr" class="hidden-err" role="alert"><div><b>Oyun yüklenemedi</b><br><span class="err-msg">İnternet bağlantını kontrol et ve sayfayı yenile.</span></div></div>
 <div id="rotate">📱<br><b>Bu oyun yalnızca yatay oynanır</b><br>Telefonunu yan çevir.</div>
 
 <div id="modal" class="hidden">
@@ -103,12 +110,20 @@
   </div>
 </div>
 
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+<script>
+// Hata kutusu: yükleme veya çalışma sırasındaki hatayı ekranda gösterir
+function gameError(msg) {
+  const box = document.getElementById("loadErr");
+  if (!box) return;
+  box.querySelector(".err-msg").textContent = msg;
+  box.classList.add("show");
+}
+window.addEventListener("error", ev => gameError("Hata: " + (ev.message || "bilinmeyen hata")));
+window.addEventListener("unhandledrejection", ev => gameError("Hata: " + ((ev.reason && ev.reason.message) || ev.reason)));
+setTimeout(() => { if (!window.__gameStarted) gameError("Oyun başlamadı. İnternet bağlantını kontrol et ve sayfayı yenile."); }, 8000);
 </script>
 <script type="module">
-import * as THREE from "three";
-import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/environments/RoomEnvironment.js";
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 // ---------- Oyun ayarları ----------
 const SAVE_KEY = "sehir-hayati-3d-v1";
@@ -208,7 +223,15 @@ scene.fog = new THREE.Fog(0xa7d8f2, 110, 280);
 
 // Gerçekçi yansımalar ve ortam ışığı (PBR malzemeler bu sayede parlak ve doğal görünür)
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// Basit parlak bir ortam (harici örnek dosyaya gerek yok)
+const envScene = new THREE.Scene();
+envScene.background = new THREE.Color(0xdfeeff);
+envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide })));
+try {
+  scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+} catch (err) {
+  console.warn("Ortam yansımaları kurulamadı:", err); // yansımalar olmasa da oyun çalışır
+}
 
 // Yordamsal dokular: resim dosyası gerektirmez
 function canvasTexture(size, draw, repeatX = 1, repeatY = 1) {
@@ -788,6 +811,7 @@ function updateHUD(dt) {
     : "Meslek yok: Belediye'ye git";
   $("hHouse").textContent = "🏠 " + (state.house === null ? "Kiralık ev" : HOUSES[state.house].name);
   $("hCar").textContent = "🚗 " + (state.car === null ? "Araba yok" : CARS[state.car].name);
+  $("dbg").textContent = `çizim:${renderer.info.render.calls} üçgen:${renderer.info.render.triangles} nesne:${scene.children.length} kamera:${camera.position.x.toFixed(0)},${camera.position.y.toFixed(0)},${camera.position.z.toFixed(0)} oyuncu:${player.position.x.toFixed(0)},${player.position.z.toFixed(0)}`;
 
   const near = nearestInteractable();
   const prompt = $("prompt");
@@ -807,12 +831,22 @@ function updateHUD(dt) {
 let saveTimer = 0;
 let last = performance.now();
 const isPortraitTouch = () => isTouch && matchMedia("(orientation: portrait)").matches;
+// Her kare: hata olursa kutuda göster, döngü yine de devam eder
 function frame(now) {
+  try {
+    frameStep(now);
+  } catch (err) {
+    console.error(err);
+    window.gameError("Oyun hatası: " + (err && err.message ? err.message : err));
+  }
+  requestAnimationFrame(frame);
+}
+function frameStep(now) {
+  window.__gameStarted = true;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (isPortraitTouch()) {               // dikeyken oyun durur, "yan çevir" uyarısı görünür
     joy.x = 0; joy.y = 0;
-    requestAnimationFrame(frame);
     return;
   }
 
@@ -836,7 +870,6 @@ function frame(now) {
 
   updateHUD(dt);
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
 }
 
 addEventListener("resize", () => {
