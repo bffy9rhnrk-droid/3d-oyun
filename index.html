@@ -409,7 +409,8 @@ function swing(g, dt, amount) {
 
 // Oyuncu
 const player = new THREE.Group();
-player.add(makeFigure(0x4aa3ff));
+const playerFigure = makeFigure(0x4aa3ff);
+player.add(playerFigure);
 scene.add(player);
 let heading = state.player.h || 0;
 player.position.set(state.player.x ?? 0, 0, state.player.z ?? 20);
@@ -723,7 +724,7 @@ function updatePlayer(dt) {
   const fwd = clamp((keys.w ? 1 : 0) - (keys.s ? 0.6 : 0) + clamp(-joy.y, -0.6, 1), -0.6, 1);
   const side = clamp(joy.x, -1, 1);
   const len = Math.hypot(fwd, side);
-  if (len <= 0.001) { swing(player, dt, 0); player.rotation.y = heading; return; }
+  if (len <= 0.001) { swing(playerFigure, dt, 0); player.rotation.y = heading; return; }
 
   const sprinting = (keys.shift || sprintHeld) && energy > 5;
   const fx = Math.sin(camYaw), fz = Math.cos(camYaw);   // kameranın ileri yönü
@@ -740,7 +741,7 @@ function updatePlayer(dt) {
   pushOut(p);
   p.x = clamp(p.x, -MAP_LIMIT, MAP_LIMIT);
   p.z = clamp(p.z, -MAP_LIMIT, MAP_LIMIT);
-  swing(player, dt, 1);
+  swing(playerFigure, dt, 1);
   player.rotation.y = heading;
 }
 
